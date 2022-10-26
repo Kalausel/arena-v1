@@ -111,7 +111,7 @@ for step in range(TOTAL_STEPS):
     # TODO: compute `loss`, which is the sum of squared error between `y` and `y_pred`
     loss = np.square((y - y_pred)).sum()
 
-    if step % 2 == 0:
+    if step % 500 == 0:
         print(f"{loss = :.2f}")
         coeffs_list.append([a_0, A_n.copy(), B_n.copy()])
         y_pred_list.append(y_pred)
@@ -156,10 +156,10 @@ for step in range(TOTAL_STEPS):
     # TODO: compute `loss`, which is the sum of squared error between `y` and `y_pred`
     loss = torch.square((y - y_pred)).sum()
 
-    if step % 2 == 0:
+    if step % 100 == 0:
         print(f"{loss = :.2f}")
-        coeffs_list.append([a_0, A_n.detach(), B_n.detach()])
-        y_pred_list.append(y_pred)
+        coeffs_list.append([a_0.item(), A_n.detach().tolist(), B_n.detach().tolist()])
+        y_pred_list.append(y_pred.tolist())
 
     # TODO: compute gradients of coeffs with respect to `loss`
     grad_a0 = 2 * (y_pred - y).sum() * 1/2
@@ -170,6 +170,57 @@ for step in range(TOTAL_STEPS):
     a_0 -= LEARNING_RATE * grad_a0
     A_n -= LEARNING_RATE * grad_A_n
     B_n -= LEARNING_RATE * grad_B_n
-print(coeffs_list)
+
 utils.visualise_fourier_coeff_convergence(x, y, y_pred_list, coeffs_list)
+# %%
+
+import torch
+import math
+
+dtype = torch.float
+device = torch.device("cpu")
+
+x = torch.linspace(-math.pi, math.pi, 2000, device=device, dtype=dtype)
+y = TARGET_FUNC(x)
+
+x_cos = torch.stack([torch.cos(n*x) for n in range(1, NUM_FREQUENCIES+1)])
+x_sin = torch.stack([torch.sin(n*x) for n in range(1, NUM_FREQUENCIES+1)])
+
+a_0 = torch.randn((), device=device, dtype=dtype, requires_grad=True)
+A_n = torch.randn((NUM_FREQUENCIES), device=device, dtype=dtype, requires_grad=True)
+B_n = torch.randn((NUM_FREQUENCIES), device=device, dtype=dtype, requires_grad=True)
+
+LEARNING_RATE = 1e-6
+TOTAL_STEPS = 4000
+
+y_pred_list = []
+coeffs_list = []
+
+for step in range(TOTAL_STEPS):
+    
+    # Forward pass: compute predicted y
+    y_pred = 0.5 * a_0 + einsum("freq x, freq -> x", x_cos, A_n) + einsum("freq x, freq -> x", x_sin, B_n)
+    
+    # Compute and print loss
+    loss = torch.square(y - y_pred).sum()
+    if step % 100 == 0:
+        print(f"{loss = :.2f}")
+        y_pred_list.append(y_pred.detach())
+        coeffs_list.append([a_0.item(), A_n.to("cpu").detach().numpy().copy(), B_n.to("cpu").detach().numpy().copy()])
+    
+    # Backprop to compute gradients of coeffs with respect to loss
+    loss.backward()
+    
+    # Update weights using gradient descent
+    with torch.no_grad():
+        for coeff in [a_0, A_n, B_n]:
+            coeff -= LEARNING_RATE * coeff.grad
+            coeff.grad = None
+
+utils.visualise_fourier_coeff_convergence(x, y, y_pred_list, coeffs_list)
+
+# %%
+import torch
+a=torch.tensor([5])
+
 # %%
